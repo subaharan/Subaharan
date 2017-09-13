@@ -4,6 +4,7 @@ import android.*;
 import android.Manifest;
 import android.content.ClipData;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
@@ -20,20 +21,28 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.AutoCompleteTextView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
+import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.places.GeoDataClient;
+import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.PlaceDetectionClient;
 import com.google.android.gms.location.places.PlaceLikelihood;
 import com.google.android.gms.location.places.PlaceLikelihoodBufferResponse;
 import com.google.android.gms.location.places.Places;
+import com.google.android.gms.location.places.ui.PlaceAutocomplete;
+import com.google.android.gms.location.places.ui.PlaceAutocompleteFragment;
+import com.google.android.gms.location.places.ui.PlaceSelectionListener;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -47,9 +56,12 @@ import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.subaharan.subimaptest.utils.ApiUtil;
+import com.subaharan.subimaptest.utils.PlaceDetails;
 import com.subaharan.subimaptest.utils.RestApi;
 import com.subaharan.subimaptest.utils.RoutPoints;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -83,7 +95,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     Location mLastLocation;
     Marker mCurrLocationMarker;
     LocationRequest mLocationRequest;
-
+    PlaceAutocompleteFragment autocompleteFragment;
+    TextView autocomplete;
 
     private GoogleMap mMap;
     GeoDataClient mGeoDataClient;
@@ -92,9 +105,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     boolean mLocationPermissionGranted;
     public static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
     private final LatLng mDefaultLocation = new LatLng(-33.8523341, 151.2106085);
-    private static final int DEFAULT_ZOOM = 16;
+    private static final int DEFAULT_ZOOM = 15;
     String TAG ="MapsActivity";
-
+    int PLACE_AUTOCOMPLETE_REQUEST_CODE = 1;
+    Intent intent;
+ArrayList<PlaceDetails> placeDetailses=new ArrayList<>();
     // Keys for storing activity state.
     private static final String KEY_CAMERA_POSITION = "camera_position";
     private static final String KEY_LOCATION = "location";
@@ -117,7 +132,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
 
 
-
+        autocomplete=(TextView)findViewById(R.id.autocomplete);
                 // Construct a GeoDataClient.
         mGeoDataClient = Places.getGeoDataClient(this, null);
 
@@ -127,7 +142,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         // Construct a FusedLocationProviderClient.
         mFusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
 
-
+         autocompleteFragment = (PlaceAutocompleteFragment)
+                getFragmentManager().findFragmentById(R.id.place_autocomplete_fragment);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -136,12 +152,85 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
 
 
+        autocomplete.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                try {
+                    intent = new PlaceAutocomplete.IntentBuilder(PlaceAutocomplete.MODE_FULLSCREEN)
+                                    .build(MapsActivity.this);
+                    startActivityForResult(intent, PLACE_AUTOCOMPLETE_REQUEST_CODE);
+                } catch (GooglePlayServicesRepairableException e) {
+                    // TODO: Handle the error.
+                } catch (GooglePlayServicesNotAvailableException e) {
+                    // TODO: Handle the error.
+                }
+            }
+        });
+
+        autocompleteFragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
+                // TODO: Get info about the selected place.
+                Log.i(TAG, "Place: " + place.getName());
+
+
+            }
+
+            @Override
+            public void onError(Status status) {
+                // TODO: Handle the error.
+                Log.i(TAG, "An error occurred: " + status);
+            }
+        });
+
 
     }
 
+  /* PlaceEntity{
+        id=ChIJ44FIpVeqADsR5-aCiQYUWnY,
+                placeTypes=   [
+        1009,
+                1012
+   ],
+        locale=null,
+                name=Dindigul,
+                address=Dindigul,
+                Tamil Nadu,
+                India,
+                phoneNumber=,
+                latlng=lat/lng:(10.367312300000002,
+                77.98029060000002   ),
+        viewport=LatLngBounds   {
+            southwest=lat/lng:(10.3244613,
+                    77.936313      ),
+            northeast=lat/lng:(10.4036569,
+                    78.0115557      )
+        },
+        websiteUri=null,
+                isPermanentlyClosed=false,
+                priceLevel=-1
+    }*/
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == PLACE_AUTOCOMPLETE_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) {
+                Place place = PlaceAutocomplete.getPlace(this, data);
+                Log.e(TAG, "Place: " + place.getName()+" "+place.toString());
 
+autocomplete.setText(place.getAddress()+", "+place.getLatLng());
+                searchLocation(place.getLatLng());
 
+            } else if (resultCode == PlaceAutocomplete.RESULT_ERROR) {
+                Status status = PlaceAutocomplete.getStatus(this, data);
+                // TODO: Handle the error.
+                Log.i(TAG, status.getStatusMessage());
+
+            } else if (resultCode == RESULT_CANCELED) {
+                // The user canceled the operation.
+            }
+        }
+    }
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
@@ -254,7 +343,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
                     //move map camera
                     mMap.moveCamera(CameraUpdateFactory.newLatLng(origin));
-                    mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
+                    mMap.animateCamera(CameraUpdateFactory.zoomTo(DEFAULT_ZOOM));
                 }
 
             }
@@ -316,6 +405,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return true;
     }
 
+
+    void  searchLocation(LatLng latLng){
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, DEFAULT_ZOOM));
+        mMap.addMarker(new MarkerOptions().position(latLng).title("My Location"));
+    }
 
 
     private void updateLocationUI() {
@@ -642,7 +736,7 @@ Log.e("Url",url);
 
         //move map camera
         mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
-        mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
+        mMap.animateCamera(CameraUpdateFactory.zoomTo(DEFAULT_ZOOM));
 
         //stop location updates
         if (mGoogleApiClient != null) {
